@@ -15,7 +15,7 @@ abstract contract StdCheatsSafe {
     uint256 private CONSTRUCTOR = _constructor();
 
     struct Chain {
-        // The chain name, using underscores as the separator to match `foundry.toml` conventions.
+        // The chain name
         string name;
         // The chain's Chain ID.
         uint256 chainId;
@@ -26,8 +26,10 @@ abstract contract StdCheatsSafe {
         string rpcUrl;
     }
 
-    // Maps from a chain's name (matching what's in the `foundry.toml` file) to chain data.
-    mapping(string => Chain) internal stdChains;
+    // Default map from a chain's name to chain data.
+    // Use chains(chainName) to load foundry.toml data
+    mapping(string => Chain) internal chains;
+    mapping(string => string) internal stdRpcUrls;
 
     // Data structures to parse Transaction objects from the broadcast artifact
     // that conform to EIP1559. The Raw structs is what is parsed from the JSON
@@ -207,31 +209,82 @@ abstract contract StdCheatsSafe {
     }
 
     function _constructor() private returns (uint256) {
-        // Initialize `stdChains` with the defaults.
-        stdChains["anvil"] = Chain("Anvil", 31337, "http://127.0.0.1:8545");
-        stdChains["hardhat"] = Chain("Hardhat", 31337, "http://127.0.0.1:8545");
-        stdChains["mainnet"] = Chain("Mainnet", 1, "https://mainnet.infura.io/v3/6770454bc6ea42c58aac12978531b93f");
-        stdChains["goerli"] = Chain("Goerli", 5, "https://goerli.infura.io/v3/6770454bc6ea42c58aac12978531b93f");
-        stdChains["sepolia"] = Chain("Sepolia", 11155111, "https://rpc.sepolia.dev");
-        stdChains["optimism"] = Chain("Optimism", 10, "https://mainnet.optimism.io");
-        stdChains["optimism_goerli"] = Chain("Optimism Goerli", 420, "https://goerli.optimism.io");
-        stdChains["arbitrum_one"] = Chain("Arbitrum One", 42161, "https://arb1.arbitrum.io/rpc");
-        stdChains["arbitrum_one_goerli"] = Chain("Arbitrum One Goerli", 421613, "https://goerli-rollup.arbitrum.io/rpc");
-        stdChains["arbitrum_nova"] = Chain("Arbitrum Nova", 42170, "https://nova.arbitrum.io/rpc");
-        stdChains["polygon"] = Chain("Polygon", 137, "https://polygon-rpc.com");
-        stdChains["polygon_mumbai"] = Chain("Polygon Mumbai", 80001, "https://rpc-mumbai.matic.today");
-        stdChains["avalanche"] = Chain("Avalanche", 43114, "https://api.avax.network/ext/bc/C/rpc");
-        stdChains["avalanche_fuji"] = Chain("Avalanche Fuji", 43113, "https://api.avax-test.network/ext/bc/C/rpc");
-        stdChains["bnb_smart_chain"] = Chain("BNB Smart Chain", 56, "https://bsc-dataseed1.binance.org");
-        stdChains["bnb_smart_chain_testnet"] = Chain("BNB Smart Chain Testnet", 97, "https://data-seed-prebsc-1-s1.binance.org:8545");// forgefmt: disable-line
-        stdChains["gnosis_chain"] = Chain("Gnosis Chain", 100, "https://rpc.gnosischain.com");
+        // Initialize `chains` and `stdRpcUrls` with the defaults.
+        defaultChain("anvil", Chain("Anvil", 31337, "http://127.0.0.1:8545"));
 
-        // Loop over RPC URLs in the config file to replace the default RPC URLs
-        Vm.Rpc[] memory rpcs = vm.rpcUrlStructs();
-        for (uint256 i = 0; i < rpcs.length; i++) {
-            stdChains[rpcs[i].name].rpcUrl = rpcs[i].url;
-        }
+        defaultChain("hardhat", Chain("Hardhat", 31337, "http://127.0.0.1:8545"));
+
+        defaultChain("mainnet", Chain("Mainnet", 1, "https://mainnet.infura.io/v3/6770454bc6ea42c58aac12978531b93f"));
+
+        defaultChain("goerli", Chain("Goerli", 5, "https://goerli.infura.io/v3/6770454bc6ea42c58aac12978531b93f"));
+
+        defaultChain("sepolia", Chain("Sepolia", 11155111, "https://rpc.sepolia.dev"));
+
+        defaultChain("optimism", Chain("Optimism", 10, "https://mainnet.optimism.io"));
+
+        defaultChain("optimism_goerli", Chain("Optimism Goerli", 420, "https://goerli.optimism.io"));
+
+        defaultChain("arbitrum_one", Chain("Arbitrum One", 42161, "https://arb1.arbitrum.io/rpc"));
+
+        defaultChain(
+            "arbitrum_one_goerli", Chain("Arbitrum One Goerli", 421613, "https://goerli-rollup.arbitrum.io/rpc")
+        );
+
+        defaultChain("arbitrum_nova", Chain("Arbitrum Nova", 42170, "https://nova.arbitrum.io/rpc"));
+
+        defaultChain("polygon", Chain("Polygon", 137, "https://polygon-rpc.com"));
+
+        defaultChain("polygon_mumbai", Chain("Polygon Mumbai", 80001, "https://rpc-mumbai.matic.today"));
+
+        defaultChain("avalanche", Chain("Avalanche", 43114, "https://api.avax.network/ext/bc/C/rpc"));
+
+        defaultChain("avalanche_fuji", Chain("Avalanche Fuji", 43113, "https://api.avax-test.network/ext/bc/C/rpc"));
+
+        defaultChain("bnb_smart_chain", Chain("BNB Smart Chain", 56, "https://bsc-dataseed1.binance.org"));
+
+        defaultChain(
+            "bnb_smart_chain_testnet",
+            Chain("BNB Smart Chain Testnet", 97, "https://data-seed-prebsc-1-s1.binance.org:8545")
+        );
+
+        defaultChain("gnosis_chain", Chain("Gnosis Chain", 100, "https://rpc.gnosis_chain.com"));
+
         return 0;
+    }
+
+    // register a new default chain
+    // key should match the entry key in foundry.toml
+    function defaultChain(string memory key, Chain memory _chain) internal {
+        string memory rpcUrl = _chain.rpcUrl;
+        stdRpcUrls[key] = rpcUrl;
+        _chain.rpcUrl = "";
+        chains[key] = _chain;
+        _chain.rpcUrl = rpcUrl; // restore argument
+    }
+
+    // return chain information
+    // * for rpcUrl, lookup in descending order of priority:
+    // custom rpc url -> config entry -> default rpc url -> else fail
+    // * no need for setters, you can directly set the chains[key] mapping
+    function chain(string memory key) public view returns (Chain memory chainData) {
+        chainData = chains[key];
+        if (bytes(chainData.rpcUrl).length == 0) {
+            try vm.rpcUrl(key) returns (string memory configRpcUrl) {
+                chainData.rpcUrl = configRpcUrl;
+            } catch (bytes memory err) {
+                chainData.rpcUrl = stdRpcUrls[key];
+                // distinguish 'not found' from 'cannot read'
+                bytes memory message = abi.encode(abi.encodePacked("invalid rpc url ", key));
+                bytes memory notFoundError = abi.encodePacked(keccak256("CheatCodeError"), message);
+                // bubble up unless error=not found and there is a default url
+                if (keccak256(notFoundError) != keccak256(err) || bytes(chainData.rpcUrl).length == 0) {
+                    /// @solidity memory-safe-assembly
+                    assembly {
+                        revert(add(32, err), mload(err))
+                    }
+                }
+            }
+        }
     }
 
     function assumeNoPrecompiles(address addr) internal view virtual {
@@ -251,13 +304,13 @@ abstract contract StdCheatsSafe {
         vm.assume(addr < address(0x1) || addr > address(0x9));
 
         // forgefmt: disable-start
-        if (chainId == stdChains["optimism"].chainId || chainId == stdChains["optimism_goerli"].chainId) {
+        if (chainId == chains["optimism"].chainId || chainId == chains["optimism_goerli"].chainId) {
             // https://github.com/ethereum-optimism/optimism/blob/eaa371a0184b56b7ca6d9eb9cb0a2b78b2ccd864/op-bindings/predeploys/addresses.go#L6-L21
             vm.assume(addr < address(0x4200000000000000000000000000000000000000) || addr > address(0x4200000000000000000000000000000000000800));
-        } else if (chainId == stdChains["arbitrum_one"].chainId || chainId == stdChains["arbitrum_one_goerli"].chainId) {
+        } else if (chainId == chains["arbitrum_one"].chainId || chainId == chains["arbitrum_one_goerli"].chainId) {
             // https://developer.arbitrum.io/useful-addresses#arbitrum-precompiles-l2-same-on-all-arb-chains
             vm.assume(addr < address(0x0000000000000000000000000000000000000064) || addr > address(0x0000000000000000000000000000000000000068));
-        } else if (chainId == stdChains["avalanche"].chainId || chainId == stdChains["avalanche_fuji"].chainId) {
+        } else if (chainId == chains["avalanche"].chainId || chainId == chains["avalanche_fuji"].chainId) {
             // https://github.com/ava-labs/subnet-evm/blob/47c03fd007ecaa6de2c52ea081596e0a88401f58/precompile/params.go#L18-L59
             vm.assume(addr < address(0x0100000000000000000000000000000000000000) || addr > address(0x01000000000000000000000000000000000000ff));
             vm.assume(addr < address(0x0200000000000000000000000000000000000000) || addr > address(0x02000000000000000000000000000000000000FF));
