@@ -253,28 +253,28 @@ abstract contract StdCheatsSafe {
     }
 
     // register a new default chain
-    // key should match the entry key in foundry.toml
-    function defaultChain(string memory key, Chain memory _chain) internal {
+    // chainAlias should match the chainAlias in foundry.toml
+    function defaultChain(string memory chainAlias, Chain memory _chain) internal {
         string memory rpcUrl = _chain.rpcUrl;
-        stdRpcUrls[key] = rpcUrl;
+        stdRpcUrls[chainAlias] = rpcUrl;
         _chain.rpcUrl = "";
-        chains[key] = _chain;
+        chains[chainAlias] = _chain;
         _chain.rpcUrl = rpcUrl; // restore argument
     }
 
     // return chain information
     // * for rpcUrl, lookup in descending order of priority:
     // custom rpc url -> config entry -> default rpc url -> else fail
-    // * no need for setters, you can directly set the chains[key] mapping
-    function chain(string memory key) public view returns (Chain memory chainData) {
-        chainData = chains[key];
+    // * no need for setters, you can directly set the chains[chainAlias] mapping
+    function chain(string memory chainAlias) public view returns (Chain memory chainData) {
+        chainData = chains[chainAlias];
         if (bytes(chainData.rpcUrl).length == 0) {
-            try vm.rpcUrl(key) returns (string memory configRpcUrl) {
+            try vm.rpcUrl(chainAlias) returns (string memory configRpcUrl) {
                 chainData.rpcUrl = configRpcUrl;
             } catch (bytes memory err) {
-                chainData.rpcUrl = stdRpcUrls[key];
+                chainData.rpcUrl = stdRpcUrls[chainAlias];
                 // distinguish 'not found' from 'cannot read'
-                string memory message = string(abi.encodePacked("invalid rpc url ", key));
+                string memory message = string(abi.encodePacked("invalid rpc url ", chainAlias));
                 bytes memory notFoundError = abi.encodeWithSignature("CheatCodeError", message);
                 // bubble up unless error=not found and there is a default url
                 if (keccak256(notFoundError) != keccak256(err) || bytes(chainData.rpcUrl).length == 0) {
