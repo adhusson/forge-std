@@ -274,8 +274,8 @@ abstract contract StdCheatsSafe {
             } catch (bytes memory err) {
                 chainData.rpcUrl = stdRpcUrls[key];
                 // distinguish 'not found' from 'cannot read'
-                bytes memory message = abi.encode(abi.encodePacked("invalid rpc url ", key));
-                bytes memory notFoundError = abi.encodePacked(keccak256("CheatCodeError"), message);
+                string memory message = string(abi.encodePacked("invalid rpc url ", key));
+                bytes memory notFoundError = abi.encodeWithSignature("CheatCodeError", message);
                 // bubble up unless error=not found and there is a default url
                 if (keccak256(notFoundError) != keccak256(err) || bytes(chainData.rpcUrl).length == 0) {
                     /// @solidity memory-safe-assembly
